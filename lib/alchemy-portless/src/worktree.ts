@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process"
 import path from "node:path"
 import { String as Str } from "effect"
+import { routeOverride } from "./dsg-routes.ts"
 
 const git = (cwd: string, ...args: string[]): string | undefined => {
 	const result = spawnSync("git", args, { cwd, encoding: "utf8" })
@@ -33,10 +34,5 @@ export const worktreePrefix = (cwd: string = process.cwd()): string => {
 export const routeHostname = (name: string, prefix: string = worktreePrefix()): string => `${prefix}${name}`
 
 /** The route's URL through the portless proxy; a plain string, usable at plan time. */
-export const routeUrl = (name: string, prefix?: string): string => {
-	// Self-hosting: MAPLE_ROUTE_<NAME>=https://host[:port] replaces the portless URL
-	// (name upper-cased, dashes to underscores: electric-sync -> MAPLE_ROUTE_ELECTRIC_SYNC).
-	const override = process.env[`MAPLE_ROUTE_${name.toUpperCase().replace(/-/g, "_")}`]
-	if (override) return override.replace(/\/+$/, "")
-	return `https://${routeHostname(name, prefix)}.localhost`
-}
+export const routeUrl = (name: string, prefix?: string): string =>
+	routeOverride(name) ?? `https://${routeHostname(name, prefix)}.localhost`

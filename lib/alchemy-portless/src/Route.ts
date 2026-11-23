@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import * as LocalProvider from "alchemy/Local/LocalProvider"
 import * as ProviderLayer from "alchemy/Local/ProviderLayer"
 import * as Output from "alchemy/Output"
@@ -7,6 +6,7 @@ import * as Provider from "alchemy/Provider"
 import { Resource } from "alchemy/Resource"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
+import { registerRoute } from "./dsg-routes.ts"
 import { choosePort, PortRange, preferredPort } from "./ports.ts"
 import { routeHostname, worktreePrefix } from "./worktree.ts"
 
@@ -121,21 +121,15 @@ export const RouteProviderLocal = () =>
 				const hostname = routeHostname(news.name, prefix)
 				// Keyed by fqn: two worktrees share a preferred port and the second walks forward.
 				const port = news.port ?? (yield* choosePort(fqn))
-				// Self-hosting: with MAPLE_ROUTES_FILE set, record host -> port for an external
-				// proxy instead of registering with portless.
-				const routesFile = process.env.MAPLE_ROUTES_FILE
-				if (routesFile) {
-					const override = process.env[`MAPLE_ROUTE_${news.name.toUpperCase().replace(/-/g, "_")}`]
-					const host = override ? new URL(override).hostname : `${hostname}.localhost`
-					const routes = existsSync(routesFile) ? JSON.parse(readFileSync(routesFile, "utf8")) : {}
-					routes[host] = port
-					writeFileSync(routesFile, JSON.stringify(routes))
+				// Self-hosting: an external proxy serves the route (see dsg-routes.ts).
+				const publicUrl = registerRoute(news.name, hostname, port)
+				if (publicUrl !== undefined) {
 					return {
 						name: news.name,
 						hostname,
 						host: "127.0.0.1",
 						port,
-						url: override ?? `http://127.0.0.1:${port}`,
+						url: publicUrl,
 						aliased: true,
 					} satisfies RouteAttributes
 				}
