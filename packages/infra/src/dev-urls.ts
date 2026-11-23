@@ -12,6 +12,8 @@ export const DEV_APPS = [
 	"ingest",
 	"local-ui",
 	"scraper",
+	"org-eraser",
+	"audit-archive",
 ] as const
 
 export type DevApp = (typeof DEV_APPS)[number]

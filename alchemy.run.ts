@@ -97,6 +97,9 @@ const isDevServer = process.env.ALCHEMY_DEV === "true"
 /** The apps this dev run serves; undefined on a deploy, which is never partial. */
 const devApps = isDevServer ? selectedDevApps() : undefined
 
+/** DSG self-host: optional Workers are skipped when `bun dev <apps>` leaves them out; deploys build them all. */
+const wanted = (app: DevApp) => devApps === undefined || devApps.has(app)
+
 /** Every resource is declared on every run; a subset run only leaves the others unserved. */
 const workerDev = (app: DevApp) =>
 	devApps === undefined ? undefined : devApps.has(app) ? Portless.workerDev(app) : Portless.workerUnserved
@@ -388,8 +391,10 @@ export default Alchemy.Stack(
 
 		// Sole consumer of the audit queue: writes the write-once copy, then feeds api's
 		// warehouse consumer. The bucket is yielded here so its retention read stays out of Worker init.
-		yield* AuditArchiveBucket
-		yield* AuditArchiveWorker
+		if (wanted("audit-archive")) {
+			yield* AuditArchiveBucket
+			yield* AuditArchiveWorker
+		}
 
 		// prd's electric-sync reads `ELECTRIC_URL` from the secret store, so its cutover is
 		// separate; a preview's points at this one. Electric runs in ingest's VPC, hence `ingest &&`.
@@ -437,16 +442,16 @@ export default Alchemy.Stack(
 
 		const localUi = sharedApps ? yield* LocalUi : undefined
 
-		const alerting = yield* Effect.provideService(Alerting, AiWorker, ai)
-		yield* serveWorker("alerting", alerting)
+		const alerting = wanted("alerting") ? yield* Effect.provideService(Alerting, AiWorker, ai) : undefined
+		if (alerting) yield* serveWorker("alerting", alerting)
 
 		// Erases deleted orgs' data on a cron; never served, it alone holds the warehouse delete token.
-		const orgEraser = yield* OrgEraser
+		const orgEraser = wanted("org-eraser") ? yield* OrgEraser : undefined
 
 		// Chat-platform ingress. Its Live layer registers its Durable Object classes.
 		// oxlint-disable-next-line effecttsgo/strict-effect-provide
-		const chatBot = yield* Effect.provide(ChatBot, ChatBotLive)
-		yield* serveWorker("chat-bot", chatBot)
+		const chatBot = wanted("chat-bot") ? yield* Effect.provide(ChatBot, ChatBotLive) : undefined
+		if (chatBot) yield* serveWorker("chat-bot", chatBot)
 
 		// Dev only. Non-Worker processes get their port from the route; Workers bind
 		// theirs in `precreate`, so their route follows the Worker.
@@ -490,9 +495,9 @@ export default Alchemy.Stack(
 			webWorker: web?.workerName,
 			landingWorker: landing?.workerName,
 			localUiWorker: localUi?.workerName,
-			alertingWorker: alerting.workerName,
-			orgEraserWorker: orgEraser.workerName,
-			chatBotWorker: chatBot.workerName,
+			alertingWorker: alerting?.workerName,
+			orgEraserWorker: orgEraser?.workerName,
+			chatBotWorker: chatBot?.workerName,
 		}
 	}).pipe(
 		// The stack IS the entry point: the one place `MapleStack` is provided.
