@@ -12,15 +12,15 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY: registry.dsg.id
   OWNER: dsgid
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Builds on the Fringe runners: they sit behind NetBird and are already logged in to registry.dsg.id.
+    runs-on: [self-hosted, Linux, X64, dsg-owned]
     strategy:
       fail-fast: false
       matrix:
@@ -32,11 +32,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -46,5 +41,3 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:v0.4.0-dsg.${{ github.run_number }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:latest
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
