@@ -1,5 +1,5 @@
 ARG OTEL_BUILDER_VERSION=v0.151.0
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26
 
 # ---- builder ----
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
