@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import * as LocalProvider from "alchemy/Local/LocalProvider"
 import * as ProviderLayer from "alchemy/Local/ProviderLayer"
 import * as Output from "alchemy/Output"
@@ -120,6 +121,24 @@ export const RouteProviderLocal = () =>
 				const hostname = routeHostname(news.name, prefix)
 				// Keyed by fqn: two worktrees share a preferred port and the second walks forward.
 				const port = news.port ?? (yield* choosePort(fqn))
+				// Self-hosting: with MAPLE_ROUTES_FILE set, record host -> port for an external
+				// proxy instead of registering with portless.
+				const routesFile = process.env.MAPLE_ROUTES_FILE
+				if (routesFile) {
+					const override = process.env[`MAPLE_ROUTE_${news.name.toUpperCase().replace(/-/g, "_")}`]
+					const host = override ? new URL(override).hostname : `${hostname}.localhost`
+					const routes = existsSync(routesFile) ? JSON.parse(readFileSync(routesFile, "utf8")) : {}
+					routes[host] = port
+					writeFileSync(routesFile, JSON.stringify(routes))
+					return {
+						name: news.name,
+						hostname,
+						host: "127.0.0.1",
+						port,
+						url: override ?? `http://127.0.0.1:${port}`,
+						aliased: true,
+					} satisfies RouteAttributes
+				}
 				const aliased = portless("alias", hostname, String(port), "--force")
 				if (aliased) {
 					yield* Effect.addFinalizer(() =>

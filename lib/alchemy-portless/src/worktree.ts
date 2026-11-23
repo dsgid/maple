@@ -33,5 +33,10 @@ export const worktreePrefix = (cwd: string = process.cwd()): string => {
 export const routeHostname = (name: string, prefix: string = worktreePrefix()): string => `${prefix}${name}`
 
 /** The route's URL through the portless proxy; a plain string, usable at plan time. */
-export const routeUrl = (name: string, prefix?: string): string =>
-	`https://${routeHostname(name, prefix)}.localhost`
+export const routeUrl = (name: string, prefix?: string): string => {
+	// Self-hosting: MAPLE_ROUTE_<NAME>=https://host[:port] replaces the portless URL
+	// (name upper-cased, dashes to underscores: electric-sync -> MAPLE_ROUTE_ELECTRIC_SYNC).
+	const override = process.env[`MAPLE_ROUTE_${name.toUpperCase().replace(/-/g, "_")}`]
+	if (override) return override.replace(/\/+$/, "")
+	return `https://${routeHostname(name, prefix)}.localhost`
+}
