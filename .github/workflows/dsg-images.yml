@@ -2,7 +2,7 @@ name: DSG images
 
 on:
   push:
-    branches: [dsg/release-0.4]
+    branches: [main]
     paths:
       - "deploy/dsg/**"
       - "lib/alchemy-portless/**"
@@ -39,5 +39,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:v0.4.0-dsg.${{ github.run_number }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:main-dsg.${{ github.run_number }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:latest
