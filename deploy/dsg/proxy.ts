@@ -1,4 +1,4 @@
-// Host-header reverse proxy with WebSocket support: MAPLE_ROUTES_FILE maps host -> loopback port.
+// Host-header reverse proxy with WebSocket support: MAPLE_ROUTES_FILE maps "host/path-prefix" -> loopback port.
 import { existsSync, readFileSync } from "node:fs"
 const file = process.env.MAPLE_ROUTES_FILE!
 // Prebuilt web client (MAPLE_WEB_DIST) served for MAPLE_ROUTE_WEB's host, SPA fallback to index.html.
@@ -15,24 +15,36 @@ const serveWeb = async (pathname: string): Promise<Response> => {
 	if (/^\/(share|alerts\/chart|chat\/chart)\//.test(pathname)) return new Response("not available", { status: 404 })
 	return new Response(Bun.file(`${webDist}/index.html`), { headers: { "cache-control": "no-cache" } })
 }
-const lookup = (host: string): number | undefined => {
-	const routes = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}
-	return routes[host]
+// Routes are "host/prefix" -> port. The longest prefix wins and is stripped before forwarding.
+const hasRoute = (host: string, path: string) => lookup(host, path) !== undefined
+const lookup = (host: string, path: string): { port: number; path: string } | undefined => {
+	const routes: Record<string, number> = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}
+	let best: { port: number; prefix: string } | undefined
+	for (const [key, port] of Object.entries(routes)) {
+		const slash = key.indexOf("/")
+		const h = slash < 0 ? key : key.slice(0, slash)
+		const prefix = slash < 0 ? "" : key.slice(slash)
+		if (h.replace(/:\d+$/, "") !== host) continue
+		if (prefix !== "" && path !== prefix && !path.startsWith(`${prefix}/`)) continue
+		if (!best || prefix.length > best.prefix.length) best = { port, prefix }
+	}
+	return best && { port: best.port, path: path.slice(best.prefix.length) || "/" }
 }
 type WsData = { target: string; protocols: string[]; upstream?: WebSocket; queue: (string | Buffer)[] }
 Bun.serve<WsData>({
 	port: Number(process.env.PROXY_PORT ?? 8088),
 	async fetch(req, server) {
 		const url = new URL(req.url)
-		if (webDist && url.hostname === webHost && req.headers.get("upgrade") === null) return serveWeb(url.pathname)
-		const port = lookup(url.hostname)
-		if (!port) return new Response(`no route for ${url.hostname}`, { status: 502 })
+		if (webDist && url.hostname === webHost && req.headers.get("upgrade") === null && !hasRoute(url.hostname, url.pathname)) return serveWeb(url.pathname)
+		const route = lookup(url.hostname, url.pathname)
+		if (!route) return new Response(`no route for ${url.hostname}${url.pathname}`, { status: 502 })
+		const { port } = route
 		if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
 			const protocols = (req.headers.get("sec-websocket-protocol") ?? "").split(",").map((s) => s.trim()).filter(Boolean)
-			const ok = server.upgrade(req, { data: { target: `ws://127.0.0.1:${port}${url.pathname}${url.search}`, protocols, queue: [] } })
+			const ok = server.upgrade(req, { data: { target: `ws://127.0.0.1:${port}${route.path}${url.search}`, protocols, queue: [] } })
 			return ok ? undefined : new Response("upgrade failed", { status: 500 })
 		}
-		return fetch(`http://127.0.0.1:${port}${url.pathname}${url.search}`, {
+		return fetch(`http://127.0.0.1:${port}${route.path}${url.search}`, {
 			method: req.method, headers: req.headers, body: req.body, redirect: "manual", duplex: "half",
 		} as RequestInit)
 	},
