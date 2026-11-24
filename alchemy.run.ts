@@ -432,8 +432,9 @@ export default Alchemy.Stack(
 		if (!isDevServer && stage.kind === "prd" && region === "us") yield* declareStatusDomainsOrigin
 
 		// A vite-source Worker: alchemy owns its build and dev server. Binds api as `API`.
-		const web = yield* Effect.provideService(Web, ApiWorker, api)
-		yield* serveWorker("web", web)
+		// DSG self-host serves a prebuilt client from deploy/dsg/proxy.ts instead (no Vite dev server).
+		const web = wanted("web") ? yield* Effect.provideService(Web, ApiWorker, api) : undefined
+		if (web) yield* serveWorker("web", web)
 
 		// StaticSites run their production build even on `alchemy dev`, so dev uses
 		// `DEV_PROCESS_APPS` instead. Shared across instances: deployed by `us` alone.
