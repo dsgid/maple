@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process"
 import path from "node:path"
 import { String as Str } from "effect"
+import { routeOverride } from "./dsg-routes.ts"
 
 const git = (cwd: string, ...args: string[]): string | undefined => {
 	const result = spawnSync("git", args, { cwd, encoding: "utf8" })
@@ -34,4 +35,4 @@ export const routeHostname = (name: string, prefix: string = worktreePrefix()): 
 
 /** The route's URL through the portless proxy; a plain string, usable at plan time. */
 export const routeUrl = (name: string, prefix?: string): string =>
-	`https://${routeHostname(name, prefix)}.localhost`
+	routeOverride(name) ?? `https://${routeHostname(name, prefix)}.localhost`
