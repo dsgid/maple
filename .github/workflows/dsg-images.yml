@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "deploy/dsg/**"
+      - "apps/ingest/**"
       - "lib/alchemy-portless/**"
       - "otel/**"
       - ".github/workflows/dsg-images.yml"
@@ -23,18 +24,25 @@ jobs:
     runs-on: [self-hosted, Linux, X64, dsg-owned]
     strategy:
       fail-fast: false
+      # One at a time: Fringe is also the production host, and the Rust build is memory-hungry.
+      max-parallel: 1
       matrix:
         include:
           - image: maple-app
             dockerfile: deploy/dsg/Dockerfile.app
+            context: .
           - image: maple-collector
             dockerfile: otel/otel-collector.Dockerfile
+            context: .
+          - image: maple-ingest
+            dockerfile: deploy/dsg/Dockerfile.ingest
+            context: apps/ingest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
